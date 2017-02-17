@@ -1,0 +1,196 @@
+%%%%%%%%%%%%%%%%%%%%%%% second pass simple %%%%%%%%%%%%%%%%%%%%%
+clear all;
+clc;
+close all;
+%% load first pass metrics
+load points.mat 
+load pass_one.mat
+
+%% change paraameters here
+% total number of logos
+[images,nfiles]=get_logos(1);
+%image 1 is Discover logo
+%image 2 is Geico logo
+%array to store second pass result
+dynamic=[];
+%tolerance for bounding box 
+tol=0;
+%% ground truth - subjectively a user can make out the total number of times the logo appeared in given frame sequence
+totalFrames_logo1=38;   % for discover
+totalFrames_logo2=46;   % for geico
+%% main
+for ii=1:nfiles
+    %% Load video
+    obj = VideoReader('mov_1.mp4');
+    startFrame = 900;
+    nFrames = obj.NumberOfFrames;
+    endFrame=nFrames;
+    vidHeight = obj.Height;
+    vidWidth = obj.Width;
+    %define the threshold for number of features to be matched  
+    Feature_Thres=3;
+    
+    for i = 900:945
+        % dynamic array is also saved in the dame fashion as first_pass_res 
+        % make dynamic array entries zero first    
+        dynamic(i,1+5*(ii-1):5+5*(ii-1))=0;
+        %Case 1
+        %if the previous frame has entry 1 and current frame has entry 0 
+        %do the features matching with the logo extracted from the previous frame
+        
+        if(i~=0)
+            if(First_pass_res(i,1+5*(ii-1))==0 && First_pass_res(i-1,1+5*(ii-1))~=0) 
+                % get current frame
+                currFrame = read(obj,i);
+                sceneImage=rgb2gray(currFrame); %grayscale
+                sceneImage = imsharpen(sceneImage); %shapen
+                 %extract surf features using Compute_SURF_DES_KP function 
+                scenePoints = detectSURFFeatures(sceneImage);
+                [sceneFeatures, scenePoints] = extractFeatures(sceneImage,scenePoints);
+
+                %get previous frame
+                lastFrame=read(obj,i-1);
+                lastsceneImage=rgb2gray(lastFrame);
+                lastsceneImage = imsharpen(lastsceneImage);
+                % get the reference logo from the previous frame
+                % coordinates are used to ec
+                croppedone = imcrop(lastsceneImage,[First_pass_res(i-1,2+5*(ii-1)) First_pass_res(i-1,3+5*(ii-1)) First_pass_res(i-1,4+5*(ii-1)) First_pass_res(i-1,5+5*(ii-1))]);
+                newlogoPoints = detectSURFFeatures(croppedone);
+
+                [newlogoFeatures, newlogoPoints] = extractFeatures(croppedone,newlogoPoints);
+
+                logoPolygon = [1, 1;...                           % top-left
+                size(croppedone, 2), 1;...                 % top-right
+                size(croppedone, 2), size(croppedone, 1);... % bottom-right
+                1, size(croppedone, 1);...                 % bottom-left
+                1, 1];  
+
+                newlogoPairs = matchFeatures(newlogoFeatures, sceneFeatures,'Unique', true );
+                newlogoScenePoints =  newlogoPoints( newlogoPairs(:, 1), :);
+                matchedScenePoints = scenePoints( newlogoPairs(:, 2), :);
+
+                if newlogoScenePoints.Count<Feature_Thres &&  matchedScenePoints.Count <Feature_Thres
+
+                else
+                    [tform, inlierlogoPoints, inlierScenePoints] = estimateGeometricTransform(newlogoScenePoints, matchedScenePoints,'affine'); 
+
+                    newlogoPolygon = transformPointsForward(tform, logoPolygon);
+
+                    width = abs(newlogoPolygon(2,1) - newlogoPolygon(1,1))+tol*3;
+                    height = abs(newlogoPolygon(3,2) - newlogoPolygon(2,2))+tol*3;
+                    xpt=newlogoPolygon(1,1)-tol;
+                    ypt=newlogoPolygon(1,2)-tol;
+
+                    if xpt<1 | ypt<1 | width <1 | height <1  
+                       dynamic(i,1+5*(ii-1):5+5*(ii-1))=0;
+                    else 
+                        if abs(width) < abs(height)    
+                        else 
+                            dynamic(i,1+5*(ii-1))=1;
+                            dynamic(i,2+5*(ii-1):5+5*(ii-1))=[xpt ypt width height];
+
+                        end
+                    end
+
+                end
+            end
+        end
+
+        if(i~=1)
+             if(First_pass_res(i,1+5*(ii-1))~=1)
+                 if(dynamic(i,1+5*(ii-1))==0 && dynamic(i-1,1+5*(ii-1))~=0) 
+
+                    disp('value of i is ');
+                    disp(i);
+                    currFrame1 = read(obj,i); % this operation is very slow and even deprecated - replace by frameRead
+                    sceneImage1=rgb2gray(currFrame1);
+                    sceneImage1 = imsharpen(sceneImage1);
+
+                    scenePoints1 = detectSURFFeatures(sceneImage1);
+                    [sceneFeatures1, scenePoints1] = extractFeatures(sceneImage1,scenePoints1);
+
+                    %previous frame
+                    lastFrame1=read(obj,i-1);
+                    lastsceneImage1=rgb2gray(lastFrame1);
+                    lastsceneImage1 = imsharpen(lastsceneImage1);
+
+                    croppedone1 = imcrop(lastsceneImage1,[dynamic(i-1,2+5*(ii-1)) dynamic(i-1,3+5*(ii-1)) dynamic(i-1,4+5*(ii-1)) dynamic(i-1,5+5*(ii-1))]);
+
+                    newlogoPoints1 = detectSURFFeatures(croppedone1);
+                    figure;
+                    imshow(croppedone1);
+
+                    [newlogoFeatures1, newlogoPoints1] = extractFeatures(croppedone1,newlogoPoints1);
+
+                    logoPolygon1 = [1, 1;...                           % top-left
+                    size(croppedone1, 2), 1;...                 % top-right
+                    size(croppedone1, 2), size(croppedone1, 1);... % bottom-right
+                    1, size(croppedone1, 1);...                 % bottom-left
+                    1, 1];  
+
+                    newlogoPairs1 = matchFeatures(newlogoFeatures1, sceneFeatures1,'Unique', true );
+                    newlogoScenePoints1 =  newlogoPoints1( newlogoPairs1(:, 1), :);
+                    matchedScenePoints1 = scenePoints1( newlogoPairs1(:, 2), :);
+
+                    if newlogoScenePoints1.Count<Feature_Thres &&  matchedScenePoints1.Count <Feature_Thres
+
+                    else
+                        [tform1, inlierlogoPoints1, inlierScenePoints1] = estimateGeometricTransform(newlogoScenePoints1, matchedScenePoints1,'affine'); 
+
+                        newlogoPolygon1 = transformPointsForward(tform1, logoPolygon1);
+                        width1 = abs(newlogoPolygon1(2,1) - newlogoPolygon1(1,1));
+                        height1 = abs(newlogoPolygon1(3,2) - newlogoPolygon1(2,2));
+                        xpt1=newlogoPolygon1(1,1);
+                        ypt1=newlogoPolygon1(1,2);
+                        if xpt1<1 | ypt1<1 | width1 <1 | height1 <1
+                            dynamic(i,1+5*(ii-1):5+5*(ii-1))=0;
+                        else 
+                            if abs(width) < abs(height)
+                            else 
+                                dynamic(i,1+5*(ii-1))=1;
+                                dynamic(i,2+5*(ii-1):5+5*(ii-1))=[xpt1 ypt1 width1 height1];
+                            end
+                        end
+                    end
+                 end
+             end
+
+        end
+
+    end
+end
+%%
+totalFrames_logo1=38;
+totalFrames_logo2=46;
+load points.mat 
+load pass_one.mat
+
+pass_one_score_logo1  = (count_matches(1)/totalFrames_logo1)*100;
+pass_one_score_logo2  = (count_matches(2)/totalFrames_logo2)*100;
+
+[C,pass_two_total_logo1]=Union(First_pass_res,dynamic,1,900,945);
+[D,pass_two_total_logo2]=Union(First_pass_res,dynamic,6,900,945);
+
+pass_two_score_logo1  = (pass_two_total_logo1/totalFrames_logo1)*100;
+pass_two_score_logo2  = (pass_two_total_logo2/totalFrames_logo2)*100;
+
+
+str = sprintf('Ground Truth Count for Discover - %d',totalFrames_logo1);
+disp(str);
+str = sprintf('Ground Truth Count for Geico - %d',totalFrames_logo2);
+disp(str);
+
+disp('Results for LOGO 1 - Discover');
+format bank;
+str = sprintf('Results for 1st Pass - %d', round(pass_one_score_logo1));
+disp(str);
+str = sprintf('Results for 2st Pass - %d', round(pass_two_score_logo1));
+disp(str);
+
+disp('Results for LOGO 2 - GEICO');
+str = sprintf('Results for 1st Pass - %d', round(pass_one_score_logo2));
+disp(str);
+str = sprintf('Results for 2st Pass - %d', round(pass_two_score_logo2));
+disp(str);
+
+
