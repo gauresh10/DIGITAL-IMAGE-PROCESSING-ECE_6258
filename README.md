@@ -1,5 +1,5 @@
 # DIGITAL-IMAGE-PROCESSING-ECE_6258
-# Main Project (Vanjaregauresh_lipivora)
+# Main Project (Vanjaregauresh_VoraLipi)
 1. Unzip the code.zip file.
 2. Open the master.m file on matlab. 
 3. Run the file section wise and observe the results on the command window.
